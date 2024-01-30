@@ -1,0 +1,104 @@
+name: datasetname_encodername_fusename
+data_dir: "data root dir"
+root_dir: 'train data dir'
+validate_dir: 'validate/test dir'
+
+
+wild_setting: # location error
+  [ ]
+
+yaml_parser: 'yaml parser method'
+
+# homo train setting
+train_params:
+  []
+
+# proj train setting
+proj_train:
+  train_params:
+      []
+  loss:
+    core_method: cross_entropy_loss
+
+  optimizer:
+    core_method: Adam
+    lr: 2e-8
+    args:
+      [ ]
+
+  lr_scheduler:
+    [ ]
+
+input_source: ['lidar']
+label_type: 'lidar'
+
+comm_range: 70
+
+fusion:
+  core_method: 'IntermediateFusionDatasetWithneb'  # dairv2xset use IntermediateFusionDatasetWithneb, opv2vset use IntermediateFusionDatasetWithneb,
+  args:
+    proj_first: true
+    clip_pc: false
+
+# preprocess-related
+preprocess:
+  # options: BasePreprocessor, VoxelPreprocessor, BevPreprocessor
+  core_method: 'SpVoxelPreprocessor'
+  args:  # 相同encoder保持一致
+    voxel_size: &voxel_size [0.1, 0.1, 0.1]
+    max_points_per_voxel: 5
+    max_voxel_train: 36000
+    max_voxel_test: 70000
+  # lidar range for each individual cav. 相同fuse保持一致
+  cav_lidar_range: &cav_lidar [-100.8, -40, -3, 100.8, 40, 1]
+
+# data_augment setting
+data_augment:
+  - NAME: random_world_flip
+    ALONG_AXIS_LIST: [ 'x' ]
+  - NAME: random_world_rotation
+    WORLD_ROT_ANGLE: [ -0.78539816, 0.78539816 ]
+  - NAME: random_world_scaling
+    WORLD_SCALE_RANGE: [ 0.95, 1.05 ]
+
+# Anchor box related
+postprocess:  # 相同encoder保持一致
+  core_method: 'VoxelPostprocessor'  # VoxelPostprocessor, BevPostprocessor supported
+
+
+# model related
+model:
+  # encoder module name
+  encoder:  
+    core_method: point_pillar, voxelnet, second
+    args:
+      [ ]
+  # fuse module name
+  fuse:
+    core_method: hete_where2comm_fuse, hete_v2xvit_fuse, hete_v2vnet_fuse, hete_when2com_fuse
+    args:
+      [ ]
+  # head module name
+  head:
+    core_method: mlp, rpn
+    args:
+      [ ]
+
+# train settings
+loss:
+  core_method: point_pillar_loss
+  args:
+    cls_weight: 1.0
+    reg: 2.0
+
+optimizer:
+  core_method: Adam
+  lr: 0.002
+  args:
+    eps: 1e-10
+    weight_decay: 1e-4
+
+lr_scheduler:
+  core_method: multistep #step, multistep and Exponential support
+  gamma: 0.1
+  step_size: [15, 30]

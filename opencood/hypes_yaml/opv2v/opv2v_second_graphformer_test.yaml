@@ -1,0 +1,229 @@
+name: opv2v_second_graphformer_test
+data_dir: "/home/scz/hetecooper/dataset/OPV2V"
+root_dir: '/home/scz/hetecooper/dataset/OPV2V/train_mini'
+validate_dir: '/home/scz/hetecooper/dataset/OPV2V/validate_mini'
+
+
+wild_setting:
+  seed: 20
+  async: False
+  async_mode: 'sim'
+  async_overhead: 100
+  loc_err: False
+  xyz_std: 0.2
+  ryp_std: 0.2
+  data_size: 1.06  # Mb
+  transmission_speed: 27  # Mbps
+  backbone_delay: 10  # ms
+
+yaml_parser: 'load_second_params'
+train_params:
+  batch_size: &batch_size 2
+  epoches: &epoches 41
+  eval_freq: 5
+  save_freq: 5
+  test_freq: 5
+  max_cav: &max_cav 2
+
+optimizer:
+  core_method: Adam
+  lr: 0.001
+  args:
+    eps: 1e-10
+    weight_decay: 1e-3
+
+# lr_scheduler:
+#   core_method: cosineannealwarm # step, multistep, exponential and cosineannealwarm support
+#   epoches: *epoches
+#   warmup_lr: 2e-5
+#   warmup_epoches: 10
+#   lr_min: 5e-6
+lr_scheduler:
+  core_method: multistep #step, multistep and Exponential support
+  gamma: 0.1
+  step_size: [10, 25]
+
+fuse_train:
+  train_params:
+    batch_size: 1
+    epoches: &fuse_epoches 32
+    eval_freq: 3
+    save_freq: 3
+    test_freq: 3
+    max_cav: 2
+  loss:
+    core_method: point_pillar_loss
+
+  optimizer:
+    core_method: Adam
+    lr: 2e-3
+    args:
+      eps: 1e-10
+      weight_decay: 1e-4
+
+  lr_scheduler:
+    core_method: cosineannealwarm # step, multistep, exponential and cosineannealwarm support
+    epoches: *fuse_epoches
+    warmup_lr: 2e-4
+    warmup_epoches: 5
+    lr_min: 5e-7
+
+
+proj_train:
+  train_params:
+    batch_size: 6
+    epoches: &proj_epoches 11
+    eval_freq: 1
+    save_freq: 3
+    max_cav: 2
+  loss:
+    core_method: cross_entropy_loss
+
+  optimizer:
+    core_method: Adam
+    lr: 2e-8
+    args:
+      eps: 1e-10
+      weight_decay: 1e-3
+
+  lr_scheduler:
+    core_method: cosineannealwarm # step, multistep, exponential and cosineannealwarm support
+    epoches: *proj_epoches
+    warmup_lr: 2e-5
+    warmup_epoches: 10
+    lr_min: 5e-10
+
+input_source: ['lidar']
+label_type: 'lidar'
+
+comm_range: 70
+
+fusion:
+  core_method: 'IntermediateFusionDatasetWithneb' # LateFusionDataset, EarlyFusionDataset, IntermediateFusionDataset supported
+  args:
+    proj_first: true
+    clip_pc: false
+
+# Preprocess-related
+preprocess:
+  # Options: BasePreprocessor, VoxelPreprocessor, BevPreprocessor
+  core_method: 'SpVoxelPreprocessor'
+  args:
+    voxel_size: &voxel_size [0.1, 0.1, 0.1]
+    max_points_per_voxel: 5
+    max_voxel_train: 36000
+    max_voxel_test: 70000
+  # lidar range for each individual cav.
+  cav_lidar_range: &cav_lidar [-140.8, -40, -3, 140.8, 40, 1]
+
+data_augment:
+  - NAME: random_world_flip
+    ALONG_AXIS_LIST: [ 'x' ]
+
+  - NAME: random_world_rotation
+    WORLD_ROT_ANGLE: [ -0.78539816, 0.78539816 ]
+
+  - NAME: random_world_scaling
+    WORLD_SCALE_RANGE: [ 0.95, 1.05 ]
+
+# Anchor box related
+postprocess:
+  core_method: 'VoxelPostprocessor' # VoxelPostprocessor, BevPostprocessor supported
+  gt_range: *cav_lidar 
+  anchor_args:
+    cav_lidar_range: *cav_lidar
+    l: 3.9
+    w: 1.6
+    h: 1.56
+    r: [0, 90]
+    feature_stride: &feature_stride 8
+    num: &achor_num 2
+  target_args:
+    pos_threshold: 0.6
+    neg_threshold: 0.45
+    score_threshold: 0.2
+  order: 'hwl'  # hwl or lwh
+  max_num: 100  # Maximum number of objects in a single frame. Use this number to make sure different frames has the same dimension in the same batch
+  nms_thresh: 0.15
+
+# Model related
+model:
+  encoder:  
+    core_method: second
+    args:
+      batch_size: *batch_size
+      voxel_size: *voxel_size
+      lidar_range: *cav_lidar
+      anchor_number: *achor_num
+      head_dim: 512
+      mean_vfe:
+        feature_points: 4
+
+      backbone_3d: []
+
+      height_compression:
+        feature_num: 256
+
+      base_bev_backbone:
+        layer_nums:  &layer_nums [5, 5]
+        layer_strides: [1, 2]
+        num_filters: &num_filters [128, 256]
+        upsample_strides: [1, 2]
+        num_upsample_filter: [256, 256]
+      compression: 0
+  fuse:
+    core_method: hete_graphformer_fuse
+    args:
+      fully: False
+      voxel_size: *voxel_size
+      point_cloud_range: *cav_lidar
+      feature_stride: *feature_stride
+      search_range: 1.6 #寻找范围约为一辆车的长度
+      max_nodes: 9
+      
+      # local parameters
+      dropout: 0.3
+      in_channels: 512
+      head_num: 1 # head must can be divide by in_channels
+      layer_num: 1
+      layer_norm: False
+      batch_norm: true # 使图消息传递后, 每个节点的特征表示趋于接近
+      residual: false
+      
+      fuse_mode: Graphformer # GPS,  Graphformer
+      window_size: [1, 4, 8] # 
+      split_atten: true
+      
+      # global parameters
+      global_atten:
+        enabled: false
+        head_num: 1
+        dropout: 0.2
+        batch_norm: True
+      
+      # edge_encoder_name: PELinearEdge # PELinearEdge, flase
+      # layer_type: CustomGatedGCN+Performer # GAT, ATTEN/ CustomGatedGCN, Transformer
+      dim_inner: 512
+      downsample_rate: 4
+
+      # layer_nums: *layer_nums
+      # num_filters: *num_filters
+      communication:
+        round: 1
+        threshold: 0.01
+        gaussian_smooth:
+          k_size: 5
+          c_sigma: 1.0
+        
+  head:
+    core_method: mlp
+    args:
+      head_dim: 512
+      anchor_number: *achor_num
+
+loss:
+  core_method: point_pillar_loss
+  args:
+    cls_weight: 1.0
+    reg: 2.0
+

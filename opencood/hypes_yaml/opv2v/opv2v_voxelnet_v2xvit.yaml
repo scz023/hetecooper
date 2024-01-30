@@ -1,0 +1,189 @@
+name: opv2v_point_pillar_v2xvit
+data_dir: "/home/scz/hetecooper/dataset/OPV2V"
+root_dir: '/home/scz/hetecooper/dataset/OPV2V/train'
+validate_dir: '/home/scz/hetecooper/dataset/OPV2V/validate'
+
+wild_setting:
+  async: false
+  async_mode: 'sim'
+  async_overhead: 100
+  seed: 25
+  loc_err: false
+  xyz_std: 0.2
+  ryp_std: 0.2
+  data_size: 1.06 # Mb!!
+  transmission_speed: 27 # Mbps!!
+  backbone_delay: 10 # ms
+
+yaml_parser: "load_voxel_params"
+train_params:
+  batch_size: &batch_size 1
+  epoches: 40
+  eval_freq: 5
+  save_freq: 5
+  max_cav: &max_cav 2
+
+proj_train:
+  train_params:
+    batch_size: 4
+    epoches: 11
+    eval_freq: 1
+    max_cav: 2
+    save_freq: 1
+    test_freq: 1
+  loss:
+    core_method: mse_loss
+  lr_scheduler:
+    core_method: multistep #step, multistep and Exponential support
+    gamma: 0.1
+    step_size: [20, 30]
+  optimizer:
+    args:
+      eps: 1.0e-10
+      weight_decay: 0.001
+    core_method: Adam
+    lr: 0.001
+
+input_source: ['lidar']
+label_type: 'lidar'
+
+comm_range: 70
+
+fusion:
+  core_method: 'IntermediateFusionDatasetWithneb' # LateFusionDataset, EarlyFusionDataset, IntermediateFusionDataset supported
+  args:
+    cur_ego_pose_flag: False
+    proj_first: false
+    clip_pc: false
+      # when the cur_ego_pose_flag is set to True, there is no time gap
+      # between  the time when the LiDAR data is captured by connected
+      # agents and when the extracted features are received by
+      # the ego vehicle, which is equal to implement STCM. When set to False,
+      # STCM has to be used.
+
+# preprocess-related
+preprocess:
+  # options: BasePreprocessor, VoxelPreprocessor, BevPreprocessor
+  core_method: 'SpVoxelPreprocessor'
+  args:
+    voxel_size: &voxel_size [0.4, 0.4, 0.4]
+    max_points_per_voxel: &T 32
+    max_voxel_train: 36000
+    max_voxel_test: 70000
+  # LiDAR range for each individual CAV
+  cav_lidar_range: &cav_lidar [ -140.8, -40, -3, 140.8, 40, 1 ]
+
+data_augment:
+  - NAME: random_world_flip
+    ALONG_AXIS_LIST: [ 'x' ]
+
+  - NAME: random_world_rotation
+    WORLD_ROT_ANGLE: [ -0.78539816, 0.78539816 ]
+
+  - NAME: random_world_scaling
+    WORLD_SCALE_RANGE: [ 0.95, 1.05 ]
+
+# anchor box related
+postprocess:
+  core_method: 'VoxelPostprocessor' # VoxelPostprocessor, BevPostprocessor supported
+  gt_range: *cav_lidar 
+  anchor_args:
+    cav_lidar_range: *cav_lidar
+    l: 3.9
+    w: 1.6
+    h: 1.56
+    r: [0, 90]
+    num: &achor_num 2
+    feature_stride: 1 # scale of (inital vexel features) and (final feature input to head), 
+                      # Preset, used to generate softlabels from gt
+                      # can be calculated by backbone
+
+ 
+  target_args:
+    pos_threshold: 0.6
+    neg_threshold: 0.45
+    score_threshold: 0.25
+  order: 'hwl' # hwl or lwh
+  gt_range: *cav_lidar
+  max_num: 100 # maximum number of objects in a single frame. use this number to make sure different frames has the same dimension in the same batch
+  nms_thresh: 0.15
+
+# model related
+model:
+  encoder:
+    core_method: voxelnet # corresponding to VoxelNet
+    args:
+      N: *batch_size
+      T: *T
+      lidar_range: *cav_lidar
+      voxel_size: *voxel_size
+      anchor_num: *achor_num
+      compression: 0                                                  
+      pillar_vfe:
+        use_norm: true
+        with_distance: false
+        use_absolute_xyz: true
+        num_filters: [ 64 ]
+  fuse:
+    core_method: hete_v2xvit_fuse
+    args:
+      max_cav: *max_cav
+      in_channels: 128
+      encoder: &encoder
+        # number of fusion blocks per encoder layer
+        num_blocks: 1
+        # number of encoder layers
+        depth: 3
+        use_roi_mask: true
+        use_RTE: &use_RTE true
+        RTE_ratio: &RTE_ratio 2 # 2 means the dt has 100ms interval while 1 means 50 ms interval
+        # agent-wise attention
+        cav_att_config: &cav_att_config
+          dim: 128
+          use_hetero: true
+          use_RTE: *use_RTE
+          RTE_ratio: *RTE_ratio
+          heads: 8
+          dim_head: 32
+          dropout: 0.3
+        # spatial-wise attention
+        pwindow_att_config: &pwindow_att_config
+          dim: 128
+          heads: [16, 8, 4]
+          dim_head: [16, 32, 64]
+          dropout: 0.3
+          window_size: [4, 8, 16]
+          relative_pos_embedding: true
+          fusion_method: 'split_attn'
+        # feedforward condition
+        feed_forward: &feed_forward
+          mlp_dim: 128
+          dropout: 0.3
+        sttf: &sttf
+          voxel_size: *voxel_size
+          downsample_rate: 4
+
+      # add decoder later
+  head:
+    core_method: rpn
+    args:
+      anchor_num: *achor_num
+
+loss:
+  core_method: point_pillar_loss
+  args:
+    cls_weight: 1.0
+    reg: 2.0
+
+optimizer:
+  core_method: Adam
+  lr: 0.002
+  args:
+    eps: 1e-10
+    weight_decay: 1e-4
+
+lr_scheduler:
+  core_method: multistep #step, multistep and Exponential support
+  gamma: 0.1
+  step_size: [15, 30]
+
