@@ -2,6 +2,53 @@
 
 Paper will be available on Arxiv
 
+<br/>
+
+## Train model 
+
+### 1. Train model under the condition of model isomorphism
+```python
+python opencood/tools/train_homo.py \
+--hypes_yaml ${CONFIG_FILE} \
+[--model_dir  ${CHECKPOINT_FOLDER}] \
+[--fusion_method ${intermediate_with_comm}]
+```
+Example:
+```python
+python opencood/tools/train_homo.py \
+--hypes_yaml opencood/hypes_yaml/opv2v/opv2v_point_pillar_graphformer.yaml \
+--fusion_method intermediate_with_comm \
+```
+
+### 2. Adapt parameters of fusion module and mapping module for collaborative heterogeneous models
+```python
+python opencood/tools/train_fuse.py python opencood/tools/train_homo.py \
+--model_dir ${EGO_CHECKPOINT_FOLDER} \
+--model_dir_cooper $ {COLLABORATIVE_CHECKPOINT_FOLDER}
+```
+
+## Test model 
+### 1. Collaborative agents uses isomorphism model
+```python
+python opencood/tools/inference_homo.py \
+--model_dir ${CHECKPOINT_FOLDER} \
+--fusion_method ${FUSION_STRATEGY}
+```
+
+### 2. Collaborative agents uses heterogeneous model
+```python
+python opencood/tools/inference_hete.py \
+--model_dir ${CHECKPOINT_FOLDER} \
+--model_dir_cooper $ {COLLABORATIVE_CHECKPOINT_FOLDER} \
+--fusion_method ${FUSION_STRATEGY}
+```
+
+## Model zoo
+[Download](https://drive.google.com/drive/folders/1LRx6kyQD05sjWa3KcWrAtCZ4h5UQFfBz?usp=drive_link)
+
+<br/>
+<br/>
+
 ## Installation
 
 ### 1. Dependency Installation
@@ -80,47 +127,3 @@ If you have installed dgl-cuXX package, please uninstall it first.
 conda clean --all
 ```
 
-
-<br/>
-<br/>
-
-
-## Train model 
-1. Train model under the condition of model isomorphism
-```python
-python opencood/tools/train_homo.py \
---hypes_yaml ${CONFIG_FILE} \
-[--model_dir  ${CHECKPOINT_FOLDER}] \
-[--fusion_method ${intermediate_with_comm}]
-```
-Example:
-```python
-python opencood/tools/train_homo.py \
---hypes_yaml opencood/hypes_yaml/opv2v/opv2v_point_pillar_graphformer.yaml \
---fusion_method intermediate_with_comm \
-```
-
-2. Adapt parameters of fusion module and mapping module for collaborative heterogeneous models
-```python
-python opencood/tools/train_fuse.py python opencood/tools/train_homo.py \
---model_dir ${EGO_CHECKPOINT_FOLDER} \
---model_dir_cooper $ {COLLABORATIVE_CHECKPOINT_FOLDER}
-```
-
-<br/>
-
-## Test model 
-1. Collaborative agents uses isomorphism model
-```python
-python opencood/tools/inference_homo.py \
---model_dir ${CHECKPOINT_FOLDER} \
---fusion_method ${FUSION_STRATEGY}
-```
-
-2. Collaborative agents uses heterogeneous model
-```python
-python opencood/tools/inference_hete.py \
---model_dir ${CHECKPOINT_FOLDER} \
---model_dir_cooper $ {COLLABORATIVE_CHECKPOINT_FOLDER} \
---fusion_method ${FUSION_STRATEGY}
-```
