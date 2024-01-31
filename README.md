@@ -1,6 +1,6 @@
 # Hetecooper: A Framework for Heterogeneous Agent Cooperation
 
-Paper will be available on Arxiv
+Our paper will be available on Arxiv
 
 <br/>
 
@@ -42,9 +42,6 @@ python opencood/tools/inference_hete.py \
 --model_dir_cooper $ {COLLABORATIVE_CHECKPOINT_FOLDER} \
 --fusion_method ${FUSION_STRATEGY}
 ```
-
-## Model zoo
-[Download](https://drive.google.com/drive/folders/1LRx6kyQD05sjWa3KcWrAtCZ4h5UQFfBz?usp=drive_link)
 
 <br/>
 <br/>
